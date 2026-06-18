@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alzheimer's MRI Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0e1117;
+      color: #fafafa;
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .container { max-width: 780px; margin: 0 auto; }
+
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    h3 { font-size: 1.1rem; margin-bottom: 0.8rem; }
+
+    .subtitle {
+      color: #a0aec0;
+      line-height: 1.7;
+      margin-bottom: 1.5rem;
+    }
+
+    .warning {
+      background: rgba(234, 179, 8, 0.1);
+      border-left: 4px solid #eab308;
+      padding: 1rem 1.2rem;
+      border-radius: 4px;
+      color: #fef3c7;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+
+    hr { border: none; border-top: 1px solid #2d3748; margin: 1.5rem 0; }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      padding: 0.4rem 0.9rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+    }
+    .status.ok  { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+    .status.err { background: rgba(231, 76, 60, 0.15);  color: #e74c3c; }
+    .status.loading { background: rgba(160, 174, 192, 0.15); color: #a0aec0; }
+
+    .upload-zone {
+      border: 2px dashed #4a5568;
+      border-radius: 10px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-zone:hover,
+    .upload-zone.over { border-color: #667eea; background: rgba(102, 126, 234, 0.06); }
+    .upload-zone input { display: none; }
+    .upload-icon { font-size: 2.8rem; margin-bottom: 0.6rem; }
+    .upload-hint { color: #718096; font-size: 0.85rem; margin-top: 0.3rem; }
+
+    .cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 580px) { .cols { grid-template-columns: 1fr; } }
+
+    #preview {
+      width: 100%;
+      border-radius: 8px;
+      object-fit: cover;
+      display: block;
+    }
+    .img-caption { color: #718096; font-size: 0.78rem; text-align: center; margin-top: 0.4rem; }
+
+    .file-info { font-size: 0.9rem; line-height: 2; }
+    .file-info strong { display: block; margin-bottom: 0.2rem; }
+    .file-info .label { color: #718096; }
+    .file-info .value { color: #fafafa; }
+
+    .result-card {
+      border-left: 5px solid;
+      border-radius: 6px;
+      padding: 1.2rem 1.4rem;
+      margin: 1.5rem 0;
+    }
+    .result-card h3 { font-size: 1.5rem; margin-bottom: 0.3rem; }
+    .result-card .desc { font-size: 0.9rem; margin-top: 0.2rem; color: #e2e8f0; }
+    .result-card .conf { font-size: 0.9rem; margin-top: 0.4rem; font-weight: 600; color: #e2e8f0; }
+
+    .chart-wrap {
+      background: #1a202c;
+      border-radius: 8px;
+      padding: 1rem 1rem 0.5rem;
+    }
+
+    .spinner {
+      display: none;
+      text-align: center;
+      padding: 2.5rem;
+    }
+    .spinner::after {
+      content: '';
+      display: inline-block;
+      width: 2.2rem; height: 2.2rem;
+      border: 3px solid #2d3748;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #results { display: none; }
+
+    footer {
+      margin-top: 3rem;
+      color: #4a5568;
+      font-size: 0.78rem;
+      text-align: center;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>🧠 Alzheimer's MRI Image Classifier</h1>
+  <p class="subtitle">
+    Upload a brain MRI scan to classify the stage of Alzheimer's disease
+    using a deep learning model trained on the Kaggle Alzheimer MRI dataset.
+  </p>
+
+  <div class="warning">
+    ⚠️ <strong>Medical Disclaimer:</strong> This tool is for
+    <strong>educational and research purposes only</strong>. It is
+    <strong>not a substitute</strong> for professional medical diagnosis, advice, or treatment.
+    Always consult a qualified healthcare provider for any medical concerns.
+  </div>
+
+  <hr>
+
+  <div id="statusBadge" class="status loading">⏳ Checking model…</div>
+
+  <h3>Upload MRI Image</h3>
+
+  <div class="upload-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".jpg,.jpeg,.png">
+    <div class="upload-icon">📤</div>
+    <p>Drag &amp; drop a brain MRI image here</p>
+    <p class="upload-hint">or click to browse &nbsp;·&nbsp; JPG / PNG</p>
+  </div>
+
+  <div class="spinner" id="spinner"></div>
+
+  <div id="results">
+    <hr>
+    <div class="cols">
+      <div>
+        <img id="preview" alt="Uploaded MRI Scan">
+        <p class="img-caption">Uploaded MRI Scan</p>
+      </div>
+      <div class="file-info" id="fileInfo"></div>
+    </div>
+
+    <hr>
+    <h3>Prediction Result</h3>
+    <div id="resultCard" class="result-card"></div>
+
+    <h3 style="margin-top:1.5rem">Confidence Scores — All Classes</h3>
+    <div class="chart-wrap">
+      <canvas id="probChart"></canvas>
+    </div>
+  </div>
+
+  <footer>
+    Model: EfficientNetB0 fine-tuned on the Alzheimer MRI Preprocessed Dataset (Kaggle).
+  </footer>
+</div>
+
+<script>
+  const CLASS_COLORS = {
+    "NonDemented":      "#2ecc71",
+    "VeryMildDemented": "#f39c12",
+    "MildDemented":     "#e67e22",
+    "ModerateDemented": "#e74c3c",
+  };
+  const CLASS_ORDER = ["MildDemented", "ModerateDemented", "NonDemented", "VeryMildDemented"];
+
+  let chart = null;
+
+  // ── Health check ────────────────────────────────────────────────────────────
+  (async () => {
+    const badge = document.getElementById("statusBadge");
+    try {
+      const res  = await fetch("/api/health");
+      const data = await res.json();
+      if (data.status === "ok") {
+        badge.className   = "status ok";
+        badge.textContent = "✓ Model loaded successfully.";
+      } else {
+        badge.className   = "status err";
+        badge.textContent = "✗ " + (data.message || "Model not available.");
+      }
+    } catch {
+      badge.className   = "status err";
+      badge.textContent = "✗ Could not reach API.";
+    }
+  })();
+
+  // ── Drag-and-drop ───────────────────────────────────────────────────────────
+  const dropZone  = document.getElementById("dropZone");
+  const fileInput = document.getElementById("fileInput");
+
+  dropZone.addEventListener("click",      () => fileInput.click());
+  dropZone.addEventListener("dragover",   e  => { e.preventDefault(); dropZone.classList.add("over"); });
+  dropZone.addEventListener("dragleave",  ()  => dropZone.classList.remove("over"));
+  dropZone.addEventListener("drop",       e  => {
+    e.preventDefault();
+    dropZone.classList.remove("over");
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+  // ── Main flow ───────────────────────────────────────────────────────────────
+  async function handleFile(file) {
+    const reader  = new FileReader();
+    reader.onload = e => { document.getElementById("preview").src = e.target.result; };
+    reader.readAsDataURL(file);
+
+    document.getElementById("fileInfo").innerHTML = `
+      <strong>Image details</strong>
+      <div><span class="label">Format&nbsp;</span><span class="value">.${file.name.split(".").pop().toUpperCase()}</span></div>
+      <div><span class="label">Size&nbsp;&nbsp;&nbsp;</span><span class="value">${(file.size / 1024).toFixed(1)} KB</span></div>
+      <div><span class="label">Name&nbsp;&nbsp;&nbsp;</span><span class="value">${file.name}</span></div>
+    `;
+
+    document.getElementById("spinner").style.display = "block";
+    document.getElementById("results").style.display = "none";
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      const res  = await fetch("/api/predict", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (data.error) { alert("Error: " + data.error); return; }
+      renderResults(data);
+    } catch (err) {
+      alert("Request failed: " + err.message);
+    } finally {
+      document.getElementById("spinner").style.display = "none";
+    }
+  }
+
+  function renderResults(data) {
+    document.getElementById("results").style.display = "block";
+
+    const cls   = data.predicted_class;
+    const color = CLASS_COLORS[cls];
+
+    const card = document.getElementById("resultCard");
+    card.style.cssText = `background:${color}1a; border-left-color:${color};`;
+    card.innerHTML     = `
+      <h3 style="color:${color}">${cls}</h3>
+      <p class="desc">${data.description}</p>
+      <p class="conf">Confidence: ${data.confidence}%</p>
+    `;
+
+    const labels = CLASS_ORDER;
+    const values = labels.map(c => data.probabilities[c] ?? 0);
+    const colors = labels.map(c => CLASS_COLORS[c]);
+
+    if (chart) chart.destroy();
+    chart = new Chart(document.getElementById("probChart"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)}%` } },
+        },
+        scales: {
+          y: {
+            max: 100,
+            ticks: { color: "#a0aec0", callback: v => v + "%" },
+            grid:  { color: "#2d3748" },
+          },
+          x: {
+            ticks: { color: "#a0aec0" },
+            grid:  { display: false },
+          },
+        },
+      },
+    });
+  }
+</script>
+</body>
+</html>
