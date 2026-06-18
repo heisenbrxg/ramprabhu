@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(python -c \"import tensorflow\")",
+      "Bash(where python *)",
+      "Bash(pip show *)",
+      "Bash(python -c \"import tensorflow as tf; import streamlit; import plotly; from PIL import Image; print\\('OK', tf.__version__\\)\")"
+    ]
+  }
+}
